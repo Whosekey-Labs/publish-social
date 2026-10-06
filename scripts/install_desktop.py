@@ -7,6 +7,16 @@ import shutil
 import subprocess
 
 
+def register_cli_path():
+    # 기존 경로의 우선순위는 유지하면서 로그인 셸에 개인 CLI 폴더를 추가한다.
+    profile = Path.home() / ".zprofile"
+    line = b'export PATH="$PATH:$HOME/.local/bin"'
+    original = profile.read_bytes() if profile.exists() else b""
+    if line not in original:
+        profile.write_bytes(original.rstrip(b"\n") + b"\n\n" +
+                            "# Publish Social 개인용 CLI 경로\n".encode() + line + b"\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description="개인용 앱과 CLI 설치")
     parser.add_argument("--app", required=True)
@@ -40,6 +50,7 @@ def main():
         raise
     if not link.is_symlink():
         link.symlink_to(executable)
+    register_cli_path()
     print(f"앱 설치: {destination}\nCLI 설치: {link}")
 
 
