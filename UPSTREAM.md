@@ -749,4 +749,3 @@ If a token ever leaks, revoke it in that platform's app settings, re-issue it, a
 ## License
 
 [MIT](LICENSE). Contributions and forks welcome.
-
