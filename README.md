@@ -15,6 +15,8 @@ publish-social --json posts list
 
 앱을 켜지 않아도 모든 CLI 명령을 사용할 수 있다. `publish-social gui` 또는 앱 더블클릭으로 화면을 연다. 앱에서 만든 데이터도 CLI에 바로 보이며, CLI 변경은 실행 중인 앱에서 약 0.75초 간격으로 자동 반영된다.
 
+Codex처럼 파일 접근을 제한하는 에이전트에서는 공용 Application Support 폴더에 접근 가능한 승인된 호스트 실행으로 CLI를 호출한다. 권한 오류 때문에 프로젝트별 DB를 만들지 않도록 스킬에 명시했다. 일반 사용자 터미널의 CLI는 GUI나 별도 서버가 필요하지 않다.
+
 ## 데이터는 하나
 
 기본 위치는 `~/Library/Application Support/Publish Social/`다.
