@@ -550,8 +550,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception as exc:
-        print(f"오류: {safe_error(exc)}", file=sys.stderr)
-        raise SystemExit(2)
+    print("앱의 단일 게시 기록을 우회하는 브라우저 게시 CLI는 비활성화했습니다. publish-social 명령을 사용하세요.", file=sys.stderr)
+    raise SystemExit(2)

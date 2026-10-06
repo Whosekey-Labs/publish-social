@@ -1248,8 +1248,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception as exc:
-        print(f"오류: {safe_error(exc)}", file=sys.stderr)
-        raise SystemExit(2)
+    print("기존 파일 게시 CLI는 내부 어댑터로 전환했습니다. 공유 데이터를 사용하는 publish-social 명령 또는 python social.py를 실행하세요.", file=sys.stderr)
+    raise SystemExit(2)

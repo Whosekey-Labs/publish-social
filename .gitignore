@@ -23,3 +23,10 @@ Thumbs.db
 .pytest_cache/
 *.pyc
 posted.json
+
+# 개인 데이터와 빌드 결과는 소스 저장소에 넣지 않는다.
+build/
+dist/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
