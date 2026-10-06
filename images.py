@@ -27,6 +27,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -185,8 +186,7 @@ def prepare_image(path: Path) -> Path:
       3. Give up: raise ImageTooLargeError only if even the lowest JPEG quality
          is still over the cap, so a human can crop or replace the image.
 
-    Pillow resizes in place, so the source file is mutated. The JPEG fallback
-    writes a new sibling file and leaves the original alone.
+    원본은 보존하고 큰 이미지는 임시 복사본에서만 축소·재인코딩한다.
     """
     if path.suffix.lower() not in ALLOWED_SUFFIXES:
         raise ValueError(
@@ -195,6 +195,11 @@ def prepare_image(path: Path) -> Path:
 
     if path.stat().st_size <= SAFE_MAX_BYTES:
         return path
+
+    # 입력 디렉터리와 원본 픽셀을 변경하지 않는다.
+    working = Path(tempfile.mkdtemp(prefix="publish-social-image-")) / path.name
+    shutil.copy2(path, working)
+    path = working
 
     # 1. Resize down the ladder, returning as soon as it fits.
     for max_px in SHRINK_LADDER:

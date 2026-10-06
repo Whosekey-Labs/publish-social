@@ -18,3 +18,8 @@ Thumbs.db
 
 # Local tooling / session config
 .claude/
+
+# 검증 캐시와 로컬 게시물·인증 정보
+.pytest_cache/
+*.pyc
+posted.json

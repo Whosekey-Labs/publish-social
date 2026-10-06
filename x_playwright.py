@@ -53,6 +53,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from security import safe_error
 
 X_LOGIN_URL = "https://x.com/login"
 X_HOME_URL = "https://x.com/home"
@@ -353,7 +354,7 @@ def post(
     media: Path | None = None,
     *,
     headless: bool = True,
-    dry_run: bool = False,
+    dry_run: bool = True,
 ) -> str:
     """Compose and send one post to X through a logged-in browser, returning the
     new post's URL.
@@ -363,8 +364,6 @@ def post(
     The URL is read from X's own CreateTweet response (most reliable); if that is
     missed, we fall back to the "View" link in the confirmation toast.
     """
-    from playwright.sync_api import sync_playwright
-
     if media is not None:
         _validate_media(media)
 
@@ -382,6 +381,8 @@ def post(
         raise XPlaywrightError(
             f"No saved X session at {saved}. Run `x_playwright.py login` first."
         )
+
+    from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
         browser = _launch_chromium(p, headless=headless)
@@ -515,7 +516,9 @@ def main() -> int:
     p_post.add_argument("--text", required=True, help="The post text (urls are just text).")
     p_post.add_argument("--media", help="Optional path to one photo or video to attach.")
     p_post.add_argument("--headed", action="store_true", help="Show the browser window (for debugging).")
-    p_post.add_argument("--dry-run", action="store_true", help="Validate inputs; post nothing.")
+    mode = p_post.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="로컬 미리보기만 표시합니다 (기본값).")
+    mode.add_argument("--publish", action="store_true", help="명시적으로 승인받은 게시를 실행합니다.")
     p_post.add_argument(
         "--print-url", action="store_true",
         help="Print only the resulting post URL on the last stdout line (for scripting).",
@@ -536,7 +539,7 @@ def main() -> int:
 
     if args.command == "post":
         media = Path(args.media).expanduser().resolve() if args.media else None
-        url = post(args.text, media, headless=not args.headed, dry_run=args.dry_run)
+        url = post(args.text, media, headless=not args.headed, dry_run=not args.publish)
         if args.print_url:
             print(url)
         else:
@@ -549,6 +552,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except XPlaywrightError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"오류: {safe_error(exc)}", file=sys.stderr)
         raise SystemExit(2)

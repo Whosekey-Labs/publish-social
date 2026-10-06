@@ -50,6 +50,7 @@ from dotenv import load_dotenv
 
 # images.py sits next to this file; the script's own directory is on sys.path.
 import images
+from security import safe_error
 
 PEXELS_SEARCH = "https://api.pexels.com/v1/search"
 PEXELS_PHOTO = "https://api.pexels.com/v1/photos/{id}"
@@ -267,10 +268,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except FetchError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        raise SystemExit(2)
-    except requests.HTTPError as exc:
-        body = getattr(exc.response, "text", "")[:200]
-        print(f"HTTP error: {exc} {body}", file=sys.stderr)
+    except Exception as exc:
+        print(f"오류: {safe_error(exc)}", file=sys.stderr)
         raise SystemExit(2)

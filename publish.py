@@ -49,6 +49,7 @@ from dotenv import load_dotenv
 
 # images.py sits next to this file; the script's own directory is on sys.path.
 import images
+from security import safe_error
 
 def _resolve_env_path() -> Path:
     """Find .env, preferring a stable per-user location outside the repo.
@@ -475,7 +476,9 @@ def post_x_browser(text: str, media: "images.HostedImage | images.HostedVideo | 
     if not script.is_file():
         raise PublishError(f"x_playwright.py not found next to publish.py ({script}).")
 
-    cmd = ["uv", "run", "--quiet", str(script), "post", "--text", text, "--print-url"]
+    cmd = ["uv", "run", "--quiet", "--locked", "--project", str(script.parent),
+           "--extra", "browser", "python", str(script), "post", "--publish",
+           "--text", text, "--print-url"]
     if media is not None:
         cmd += ["--media", str(media.local_path)]
 
@@ -690,7 +693,7 @@ def refresh_linkedin_token() -> str:
     )
     if resp.status_code != 200:
         raise PublishError(
-            f"LinkedIn token refresh failed (HTTP {resp.status_code}): {resp.text[:200]}. "
+            f"LinkedIn 인증 갱신 실패 (HTTP {resp.status_code}). "
             "The refresh token is likely expired or revoked; re-authorize in the browser "
             "(see the LinkedIn setup guide) to mint a new token pair."
         )
@@ -754,7 +757,7 @@ def refresh_threads_token() -> str:
     )
     if resp.status_code != 200:
         raise PublishError(
-            f"Threads token refresh failed (HTTP {resp.status_code}): {resp.text[:200]}. "
+            f"Threads 인증 갱신 실패 (HTTP {resp.status_code}). "
             "A token under 24h old cannot be refreshed; if it has expired, re-authorize in the browser."
         )
     data = resp.json()
@@ -789,7 +792,7 @@ def threads_access_token() -> str:
         try:
             return refresh_threads_token()
         except PublishError as exc:
-            print(f"  Threads: deferring first token refresh ({exc}); using token as-is.")
+            print(f"  Threads: 인증 갱신을 미룹니다 ({safe_error(exc)}).")
             return token
     if time.time() >= int(exp) - 172_800:
         return refresh_threads_token()
@@ -817,7 +820,7 @@ def refresh_instagram_token() -> str:
     )
     if resp.status_code != 200:
         raise PublishError(
-            f"Instagram token refresh failed (HTTP {resp.status_code}): {resp.text[:200]}. "
+            f"Instagram 인증 갱신 실패 (HTTP {resp.status_code}). "
             "A token under 24h old cannot be refreshed; if it has expired, re-authorize in the browser."
         )
     data = resp.json()
@@ -852,7 +855,7 @@ def instagram_access_token() -> str:
         try:
             return refresh_instagram_token()
         except PublishError as exc:
-            print(f"  Instagram: deferring first token refresh ({exc}); using token as-is.")
+            print(f"  Instagram: 인증 갱신을 미룹니다 ({safe_error(exc)}).")
             return token
     if time.time() >= int(exp) - 172_800:
         return refresh_instagram_token()
@@ -885,7 +888,7 @@ def refresh_youtube_token() -> str:
     )
     if resp.status_code != 200:
         raise PublishError(
-            f"YouTube token refresh failed (HTTP {resp.status_code}): {resp.text[:200]}. "
+            f"YouTube 인증 갱신 실패 (HTTP {resp.status_code}). "
             "The refresh token is likely expired or revoked (Google expires unused tokens, "
             "and tokens for an app still in 'testing' mode last only 7 days). Re-authorize in "
             "the browser to mint a new refresh token (see the YouTube setup guide)."
@@ -965,7 +968,7 @@ def mark_posted(path: Path, posted: dict[str, str], when: datetime) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def resolve_media(post: Post, platforms: list[str]):
+def resolve_media(post: Post, platforms: list[str], *, preview: bool = False):
     has_image = bool(post.frontmatter.get("image"))
     has_video = bool(post.frontmatter.get("video"))
     if has_image and has_video:
@@ -975,6 +978,18 @@ def resolve_media(post: Post, platforms: list[str]):
         )
     if not has_image and not has_video:
         return None
+    if preview:
+        # 미리보기는 파일 존재만 확인하며 변환·업로드·인증 갱신을 하지 않는다.
+        field = "video" if has_video else "image"
+        source = images.resolve_image_path(post.path, str(post.frontmatter[field]))
+        alt = str(post.frontmatter.get(f"{field}-alt", ""))
+        if has_video:
+            info = images._ffprobe(source)
+            return images.HostedVideo(
+                local_path=source, public_url="", alt=alt,
+                duration_s=info["duration"], width=info["width"], height=info["height"],
+            )
+        return images.HostedImage(local_path=source, public_url="", alt=alt)
     # Only Threads/Instagram/Facebook fetch media from a public URL; every other
     # platform uploads the local file directly. So host (rsync) the clip only when
     # one of those three is a target. A direct-upload-only post (e.g. YouTube,
@@ -990,7 +1005,7 @@ def resolve_media(post: Post, platforms: list[str]):
         RuntimeError, FileNotFoundError, ValueError,
         images.ImageTooLargeError, images.VideoTooLargeError, images.VideoTooLongError,
     ) as exc:
-        raise PublishError(f"Media prep failed: {exc}") from exc
+        raise PublishError(f"미디어 준비 실패: {safe_error(exc)}") from exc
 
 
 def choose_platforms(args: argparse.Namespace, post: Post) -> list[str]:
@@ -1041,7 +1056,7 @@ def resolve_youtube_settings(post: Post, media) -> tuple[str, str]:
 
 def confirm(platforms: list[str]) -> bool:
     if not sys.stdin.isatty():
-        return True  # non-interactive (cron, pipe): the gates already passed
+        return False  # 비대화 실행은 승인 후 명시적인 --yes가 필요하다.
     answer = input(f"Publish to {', '.join(platforms)} for real? [y/N] ").strip().lower()
     return answer in {"y", "yes"}
 
@@ -1104,14 +1119,18 @@ def main() -> int:
     parser.add_argument("--file", help="Path to a specific post file.")
     parser.add_argument("--auto", action="store_true", help="Auto-pick the most recent ready post.")
     parser.add_argument("--platforms", help="Comma list, e.g. bluesky,mastodon. Defaults to the file's platforms.")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would post; change nothing.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="미리보기만 표시합니다 (기본값).")
+    mode.add_argument("--publish", action="store_true", help="승인한 게시물을 실제로 게시합니다.")
     parser.add_argument("--check", action="store_true",
                         help="Report which platforms have credentials (and text blocks, with a file) and print an OFFER list. Posts nothing.")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip the interactive confirmation.")
+    parser.add_argument("--allow-paid-x", action="store_true", help="별도 승인받은 X 유료 API 게시를 허용합니다.")
     parser.add_argument("--x-transport", choices=("api", "browser"), dest="x_transport",
                         help="How to post X for this run: 'api' (paid) or 'browser' (free, via Playwright). "
                              "Overrides X_TRANSPORT in .env; default is api.")
     args = parser.parse_args()
+    args.dry_run = not args.publish
 
     load_dotenv(ENV_PATH)
 
@@ -1127,13 +1146,14 @@ def main() -> int:
 
     path = select_file(args)
     post = load_post(path)
-    check_gates(post)
+    if args.publish:
+        check_gates(post)
     platforms = choose_platforms(args, post)
-    media = resolve_media(post, platforms)
+    media = resolve_media(post, platforms, preview=True)
 
     print(f"File: {path}")
     if media:
-        dest = media.public_url or "(direct upload; no media host needed)"
+        dest = "(로컬 미리보기: 변환·업로드 없음)"
         print(f"{media.kind.capitalize()}: {media.local_path.name} -> {dest}")
 
     # YouTube is video-only and carries a title/privacy from frontmatter; validate
@@ -1180,6 +1200,8 @@ def main() -> int:
     # runs even under --yes, since a link on X must always be verified by a human.
     # The browser transport is free, so the cost guardrail does not apply there.
     if "x" in platforms and x_transport() != "browser":
+        if not args.allow_paid_x:
+            raise PublishError("X 유료 API 게시는 별도 승인 후 --allow-paid-x를 지정해야 합니다.")
         x_link = find_link(texts["x"])
         if x_link and not confirm_x_link(x_link):
             print("Skipping X: link not confirmed. Other platforms are unaffected.")
@@ -1191,6 +1213,9 @@ def main() -> int:
     if not args.yes and not confirm(platforms):
         print("Aborted.")
         return 1
+
+    # 공개 서버 업로드도 사용자의 게시 승인 뒤에만 수행한다.
+    media = resolve_media(post, platforms)
 
     # YouTube needs the title/privacy that the uniform poster signature does not
     # carry, so bind them here from the values validated above.
@@ -1209,8 +1234,9 @@ def main() -> int:
             print(f"OK: {url}")
             posted[p] = url
         except Exception as exc:  # one platform failing should not lose the others
-            print(f"FAILED ({p}): {exc}")
-            failed[p] = str(exc)
+            message = safe_error(exc)
+            print(f"게시 실패 ({p}): {message}")
+            failed[p] = message
 
     if posted:
         mark_posted(path, posted, datetime.now())
@@ -1224,6 +1250,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except PublishError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"오류: {safe_error(exc)}", file=sys.stderr)
         raise SystemExit(2)

@@ -1,0 +1,17 @@
+[project]
+name = "publish-social"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "atproto", "Mastodon.py", "tweepy", "Pillow", "requests", "PyYAML", "python-dotenv",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[project.optional-dependencies]
+browser = ["playwright"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
