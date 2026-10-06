@@ -222,7 +222,8 @@ class Window(QMainWindow):
             action = QPushButton(title)
             action.setObjectName("nav")
             action.setCheckable(True)
-            action.clicked.connect(lambda checked, i=index: self.navigate(i))
+            action.setAutoExclusive(True)
+            action.toggled.connect(lambda checked, i=index: self.navigate(i) if checked else None)
             self.navigation.append(action)
             nav.addWidget(action)
         nav.addStretch()
@@ -289,7 +290,7 @@ class Window(QMainWindow):
         self.title = QLineEdit()
         self.title.setObjectName("title")
         self.title.setPlaceholderText("게시물 제목")
-        self.title.textEdited.connect(self.changed)
+        self.title.textChanged.connect(self.changed)
         editor.addWidget(self.title)
         media = QHBoxLayout()
         self.preview_image = label("사진 또는 영상\n\n첨부한 원본은 그대로 보존합니다.", "preview")
@@ -379,7 +380,7 @@ class Window(QMainWindow):
             field = QLineEdit()
             field.setPlaceholderText({"IMAGE_HOST_BASE_URL": "https://images.example.com", "IMAGE_HOST_SSH": "my-image-host", "IMAGE_HOST_PATH": "/var/www/images"}[key])
             self.setting_fields[key] = field
-            field.textEdited.connect(lambda text: setattr(self, "settings_dirty", True))
+            field.textChanged.connect(lambda text: setattr(self, "settings_dirty", True))
             form.addRow(title, field)
         form.addRow(button("호스트 설정 저장", self.save_settings, True))
         layout.addWidget(label("Instagram·Threads·Facebook 사진 게시에 필요한 이미지 호스트입니다.", "muted"))
@@ -460,7 +461,9 @@ class Window(QMainWindow):
         if not self.settings_dirty:
             self.settings_baseline = values
             for key, field in self.setting_fields.items():
+                field.blockSignals(True)
                 field.setText(values.get(key, ""))
+                field.blockSignals(False)
         self.seen_revision = revision
         self.publish_button.setEnabled(bool(self.current and not self.dirty and self.current["status"] in {"approved", "partial"}) and not (self.thread and self.thread.isRunning()))
 

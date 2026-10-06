@@ -54,3 +54,30 @@ def test_저장하지_않은_GUI편집은_CLI변경으로_덮어쓰지_않음(ap
     window.dirty = False
     window.timer.stop()
     window.close()
+
+
+def test_접근성_메뉴선택도_화면을_전환하고_선택은_하나만_유지(app, tmp_path):
+    window = Window(Service(tmp_path))
+    window.navigation[3].setChecked(True)
+    assert window.stack.currentIndex() == 3
+    assert sum(action.isChecked() for action in window.navigation) == 1
+    window.navigation[1].click()
+    assert window.stack.currentIndex() == 1
+    assert sum(action.isChecked() for action in window.navigation) == 1
+    window.timer.stop()
+    window.close()
+
+
+def test_접근성_제목수정도_저장하지_않은_편집으로_보존(app, tmp_path):
+    service = Service(tmp_path)
+    post = service.create_post("처음 제목")
+    window = Window(service)
+    window.load_post(post)
+    window.title.setText("접근성으로 수정한 제목")
+    assert window.dirty
+    Service(tmp_path).update_post(post["id"], expected_version=1, title="CLI 제목")
+    window.poll()
+    assert window.title.text() == "접근성으로 수정한 제목"
+    window.dirty = False
+    window.timer.stop()
+    window.close()
